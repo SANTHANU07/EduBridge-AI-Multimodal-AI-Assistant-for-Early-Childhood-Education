@@ -1,127 +1,70 @@
 import streamlit as st
 
+from ai_assistant import render_ai_assistant_section
+from auth import get_current_user, logout_user, render_login_screen, require_login
+from db import DB_PATH, initialize_database
+from language_utils import initialize_language_state
+from parent_portal import render_parent_portal
 from performance_dashboard import render_performance_dashboard
+from teacher_portal import render_teacher_portal
 
 
 st.set_page_config(page_title="EduBridge AI", layout="wide")
 
 
-@st.cache_resource
-def get_edu_agent():
-    from core.agent import EduAgent
+def main():
+    initialize_database()
+    initialize_language_state()
 
-    return EduAgent()
-
-
-@st.cache_resource
-def get_doc_processor():
-    from processors.doc_processor import DocProcessor
-
-    return DocProcessor()
-
-
-@st.cache_resource
-def get_image_processor():
-    from processors.image_processor import ImageProcessor
-
-    return ImageProcessor()
-
-
-@st.cache_resource
-def get_voice_processor():
-    from processors.voice_processor import VoiceProcessor
-
-    return VoiceProcessor()
-
-
-@st.cache_resource
-def get_file_handler():
-    from utils.file_handler import FileHandler
-
-    return FileHandler()
-
-
-def render_ai_assistant_page():
-    st.title("EduBridge AI")
-    st.write("AI assistant for early childhood education")
-
-    try:
-        agent = get_edu_agent()
-        doc_processor = get_doc_processor()
-        image_processor = get_image_processor()
-        voice_processor = get_voice_processor()
-        file_handler = get_file_handler()
-    except Exception as exc:
-        st.error(f"AI Assistant initialization failed: {exc}")
-        st.info(
-            "If this is a Pinecone setup issue, remove `pinecone-client`, install `pinecone`, "
-            "and make sure `PINECONE_API_KEY` and `PINECONE_INDEX` are set in `.env`."
-        )
+    if not require_login():
+        render_login_screen()
         return
 
-    role = st.selectbox(
-        "Select your role",
-        ["parent", "teacher", "admin"],
-    )
-
-    uploaded_file = st.file_uploader(
-        "Upload a document / image / audio",
-        type=["pdf", "png", "jpg", "jpeg", "wav", "mp3"],
-    )
-
-    if uploaded_file:
-        safe_name = uploaded_file.name.replace(" ", "_")
-        file_path = file_handler.save_file(uploaded_file, f"uploads/{safe_name}")
-        file_handler.save_file(uploaded_file, file_path)
-
-        if uploaded_file.type == "application/pdf":
-            text = doc_processor.read_pdf(file_path)
-            agent.add_knowledge(text, uploaded_file.name)
-            st.success("Document added to knowledge base")
-
-        elif "image" in uploaded_file.type:
-            text = image_processor.extract_text(file_path)
-            agent.add_knowledge(text, uploaded_file.name)
-            st.success("Image text extracted and added")
-
-        elif "audio" in uploaded_file.type or uploaded_file.name.lower().endswith((".mp3", ".wav", ".m4a")):
-            st.write("Saved audio path:", file_path)
-            text = voice_processor.transcribe(file_path)
-            st.session_state["voice_query"] = text
-            agent.add_knowledge(text, uploaded_file.name)
-
-            st.success(f"Audio transcribed and added: {uploaded_file.name}")
-            st.write("Transcribed voice:")
-            st.write(text)
-
-    question = st.text_input(
-        "Ask a question",
-        value=st.session_state.get("voice_query", ""),
-    )
-
-    if st.button("Ask AI"):
-        response = agent.ask(question, role)
-        st.write("### AI Response")
-        st.write(response)
-        st.session_state["voice_query"] = ""
-
-    if st.button("Clear Knowledge Base"):
-        agent.clear_knowledge()
-        st.success("Knowledge base cleared successfully")
-
-
-def main():
+    user = get_current_user()
     with st.sidebar:
         st.title("EduBridge AI")
-        page = st.radio(
-            "Choose a section",
-            ["AI Assistant", "Student Performance Dashboard"],
-        )
+        st.caption(f"Logged in as: {user['full_name']}")
+        st.caption(f"Role: {user['role']}")
+        st.caption(f"Database: {DB_PATH.resolve()}")
 
-    if page == "AI Assistant":
-        render_ai_assistant_page()
+        if user["role"] == "teacher":
+            page = st.radio(
+                "Choose a section",
+                [
+                    "Teacher Portal",
+                    "Student Performance Dashboard",
+                    "Multimodal AI Assistant",
+                ],
+            )
+        else:
+            page = st.radio(
+                "Choose a section",
+                [
+                    "Parent / Student Portal",
+                    "Multimodal AI Assistant",
+                ],
+            )
+
+        if st.button("Logout", use_container_width=True):
+            logout_user()
+            st.rerun()
+
+    if user["role"] == "teacher":
+        if page == "Teacher Portal":
+            render_teacher_portal(user)
+        elif page == "Student Performance Dashboard":
+            render_performance_dashboard()
+        else:
+            st.title("Multimodal AI Assistant")
+            st.caption("Upload school files and ask questions using EduBridge AI.")
+            render_ai_assistant_section(role="teacher", allow_uploads=True)
     else:
-        render_performance_dashboard()
+        if page == "Parent / Student Portal":
+            render_parent_portal(user)
+        else:
+            st.title("Multimodal AI Assistant")
+            st.caption("Upload files, get summaries, and ask AI questions using school files and your linked academic data.")
+            render_ai_assistant_section(role="parent", linked_student_id=user.get("linked_student_id"), allow_uploads=True)
 
 
 if __name__ == "__main__":

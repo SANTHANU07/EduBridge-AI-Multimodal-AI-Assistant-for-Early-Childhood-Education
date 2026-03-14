@@ -10,3 +10,4 @@ __pycache__/
 uploads/
 outputs/
 data/student_performance_records.csv
+data/edubridge.db
