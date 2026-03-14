@@ -1,0 +1,19 @@
+student_name,student_id,class_grade,exam_name,exam_date,subject,marks_scored,total_marks,attendance_percentage
+Aarav,STU-001,Grade 2,Term 1,2025-06-10,Math,72,100,91
+Aarav,STU-001,Grade 2,Term 1,2025-06-10,English,68,100,91
+Aarav,STU-001,Grade 2,Term 2,2025-09-15,Math,84,100,88
+Aarav,STU-001,Grade 2,Term 2,2025-09-15,English,75,100,88
+Aarav,STU-001,Grade 2,Final Review,2025-12-18,Math,89,100,93
+Aarav,STU-001,Grade 2,Final Review,2025-12-18,English,82,100,93
+Diya,STU-002,Grade 2,Term 1,2025-06-10,Math,80,100,96
+Diya,STU-002,Grade 2,Term 1,2025-06-10,Science,78,100,96
+Diya,STU-002,Grade 2,Term 2,2025-09-15,Math,82,100,92
+Diya,STU-002,Grade 2,Term 2,2025-09-15,Science,85,100,92
+Diya,STU-002,Grade 2,Final Review,2025-12-18,Math,90,100,94
+Diya,STU-002,Grade 2,Final Review,2025-12-18,Science,88,100,94
+Ishaan,STU-003,Grade 1,Term 1,2025-06-10,Math,61,100,74
+Ishaan,STU-003,Grade 1,Term 1,2025-06-10,English,65,100,74
+Ishaan,STU-003,Grade 1,Term 2,2025-09-15,Math,69,100,71
+Ishaan,STU-003,Grade 1,Term 2,2025-09-15,English,70,100,71
+Ishaan,STU-003,Grade 1,Final Review,2025-12-18,Math,73,100,78
+Ishaan,STU-003,Grade 1,Final Review,2025-12-18,English,76,100,78
