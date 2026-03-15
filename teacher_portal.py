@@ -6,6 +6,7 @@ import pandas as pd
 import streamlit as st
 
 from ai_assistant import render_ai_assistant_section
+from events_manager import render_teacher_events_section
 from db import (
     add_attendance,
     add_homework,
@@ -44,6 +45,7 @@ def render_teacher_portal(user: dict):
             "Marks",
             "Attendance",
             "Notices",
+            "School Events",
             "Uploads",
             "AI Assistant",
         ]
@@ -60,8 +62,10 @@ def render_teacher_portal(user: dict):
     with tabs[4]:
         _render_notice_management(user)
     with tabs[5]:
-        _render_uploads(user)
+        render_teacher_events_section(user)
     with tabs[6]:
+        _render_uploads(user)
+    with tabs[7]:
         render_ai_assistant_section(role="teacher", allow_uploads=True)
 
 

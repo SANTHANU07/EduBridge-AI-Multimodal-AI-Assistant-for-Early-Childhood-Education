@@ -133,17 +133,17 @@ def _extract_text_from_uploaded_file(uploaded_file, file_path: str, doc_processo
 
 def render_ai_assistant_section(role: str, linked_student_id: Optional[int] = None, allow_uploads: bool = False):
     initialize_language_state()
-    is_parent_mode = role == "parent"
-    selected_language = get_selected_language() if is_parent_mode else "English"
-    selected_language_code = get_selected_language_code() if is_parent_mode else "en"
+    is_multilingual_mode = role in {"parent", "teacher"}
+    selected_language = get_selected_language() if is_multilingual_mode else "English"
+    selected_language_code = get_selected_language_code() if is_multilingual_mode else "en"
 
-    st.subheader(t("assistant_title", selected_language))
-    st.caption(t("assistant_caption", selected_language))
+    st.subheader("EduBridge AI Assistant")
+    st.caption("Ask questions using uploaded school files and student academic data.")
 
-    if is_parent_mode:
+    if is_multilingual_mode:
         settings_col1, settings_col2 = st.columns([1, 1])
         selected_language = settings_col1.selectbox(
-            t("language_selector", selected_language),
+            "Response Language",
             LANGUAGE_OPTIONS,
             index=LANGUAGE_OPTIONS.index(get_selected_language()),
             key=f"assistant_language_selector_{role}_{linked_student_id or 'all'}",
@@ -151,11 +151,11 @@ def render_ai_assistant_section(role: str, linked_student_id: Optional[int] = No
         set_selected_language(selected_language)
         selected_language_code = get_selected_language_code()
         settings_col2.toggle(
-            t("translate_response", selected_language),
+            "Translate response",
             key="translate_response",
             value=st.session_state.get("translate_response", True),
         )
-        st.caption(f"{t('selected_language', selected_language)}: {selected_language}")
+        st.caption(f"Selected language: {selected_language}")
     else:
         st.session_state["translate_response"] = False
 
@@ -166,18 +166,20 @@ def render_ai_assistant_section(role: str, linked_student_id: Optional[int] = No
         image_processor = get_image_processor()
         voice_processor = get_voice_processor()
     except Exception as exc:
-        st.error(f"{t('ai_unavailable', selected_language)}: {exc}")
+        st.error(f"AI assistant is not available right now: {exc}")
         return None, None
 
     session_key_prefix = f"{role}_{linked_student_id or 'all'}"
     uploaded_text_key = f"uploaded_text_{session_key_prefix}"
     uploaded_file_key = f"uploaded_file_{session_key_prefix}"
+    uploaded_type_key = f"uploaded_type_{session_key_prefix}"
     st.session_state.setdefault(uploaded_text_key, "")
     st.session_state.setdefault(uploaded_file_key, "")
+    st.session_state.setdefault(uploaded_type_key, "")
 
     if allow_uploads:
         uploaded_file = st.file_uploader(
-            t("upload_label", selected_language),
+            "Upload PDF / image / audio / video for school communication",
             type=["pdf", "png", "jpg", "jpeg", "wav", "mp3", "m4a", "mp4", "mov", "avi", "mkv", "webm"],
             key=f"portal_upload_{role}",
         )
@@ -194,47 +196,59 @@ def render_ai_assistant_section(role: str, linked_student_id: Optional[int] = No
                 voice_processor,
             )
             agent.add_knowledge(text, uploaded_file.name)
-            st.session_state["portal_voice_query"] = text
             st.session_state[uploaded_text_key] = text
             st.session_state[uploaded_file_key] = uploaded_file.name
+            st.session_state[uploaded_type_key] = uploaded_file.type or Path(uploaded_file.name).suffix.lower()
 
-            st.success(f"{t('upload_success', selected_language)}: {uploaded_file.name}")
-            st.markdown(f"### {t('file_summary', selected_language)}")
-            st.write(summarize_uploaded_content(text, uploaded_file.name, role, selected_language_code))
-            st.markdown(f"### {t('content_preview', selected_language)}")
-            st.text_area(
-                t("detected_content", selected_language),
-                value=text[:2000],
-                height=220,
-                key=f"content_preview_{role}_{uploaded_file.name}",
-                disabled=True,
-            )
-            st.info(t("upload_question_hint", selected_language))
-            return uploaded_file, file_path
+            st.success(f"Uploaded and indexed: {uploaded_file.name}")
+            st.info("The file content has been added to the knowledge base. You can now ask questions about it below.")
 
     if st.session_state.get(uploaded_file_key):
-        st.caption(f"{t('current_file', selected_language)}: {st.session_state[uploaded_file_key]}")
+        st.caption(f"Current file for questions: {st.session_state[uploaded_file_key]}")
+        uploaded_type = st.session_state.get(uploaded_type_key, "")
+        if "audio" in uploaded_type or "video" in uploaded_type or uploaded_type in {
+            ".mp3",
+            ".wav",
+            ".m4a",
+            ".mp4",
+            ".mov",
+            ".avi",
+            ".mkv",
+            ".webm",
+        }:
+            st.markdown("### Transcribed Content")
+            st.text_area(
+                "Transcribed words",
+                value=st.session_state.get(uploaded_text_key, "")[:4000],
+                height=220,
+                key=f"transcript_preview_{session_key_prefix}",
+                disabled=True,
+            )
 
     question = st.text_input(
-        t("ask_ai", selected_language),
+        "Ask the AI about the uploaded file or academic data",
         value="",
         key=f"portal_question_{role}_{linked_student_id or 'all'}",
-        placeholder=t("ask_placeholder", selected_language),
+        placeholder="Example: What is this file about? What homework is mentioned in this notice?",
     )
 
-    if st.button(t("get_ai_answer", selected_language), key=f"ask_ai_{role}_{linked_student_id or 'all'}"):
+    if st.button("Get AI Answer", key=f"ask_ai_{role}_{linked_student_id or 'all'}"):
         if not question.strip():
-            st.warning(t("question_required", selected_language))
+            st.warning("Please enter a question first.")
         else:
-            response = ask_combined_ai(
-                question,
-                role=role,
-                linked_student_id=linked_student_id,
-                uploaded_text=st.session_state.get(uploaded_text_key, ""),
-                uploaded_file_name=st.session_state.get(uploaded_file_key, ""),
-                target_language=selected_language_code if is_parent_mode and st.session_state.get("translate_response", True) else "en",
-            )
-            st.write(f"### {t('ai_response', selected_language)}")
-            st.write(response)
+            try:
+                response = ask_combined_ai(
+                    question,
+                    role=role,
+                    linked_student_id=linked_student_id,
+                    uploaded_text=st.session_state.get(uploaded_text_key, ""),
+                    uploaded_file_name=st.session_state.get(uploaded_file_key, ""),
+                    target_language=selected_language_code if is_multilingual_mode and st.session_state.get("translate_response", True) else "en",
+                )
+                st.write("### AI Response")
+                st.write(response)
+            except Exception as exc:
+                st.error(f"AI response generation failed: {exc}")
+                st.info("Try restarting Ollama, freeing GPU memory, or switching to a smaller model. The app will keep working for uploads and dashboard features.")
 
     return None, None

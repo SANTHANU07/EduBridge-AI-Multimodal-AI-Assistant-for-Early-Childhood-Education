@@ -11,3 +11,5 @@ uploads/
 outputs/
 data/student_performance_records.csv
 data/edubridge.db
+streamlit_stdout.log
+streamlit_stderr.log

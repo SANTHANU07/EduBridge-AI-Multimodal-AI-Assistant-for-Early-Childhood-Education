@@ -13,6 +13,7 @@ from charts import (
     create_overall_average_chart,
     create_subject_performance_chart,
 )
+from events_manager import render_parent_events_section
 from db import get_student_overview
 from performance_utils import (
     build_summary_cards,
@@ -34,6 +35,7 @@ def render_parent_portal(user: dict):
     attendance_df = overview["attendance"].copy()
     homework_df = overview["homework"].copy()
     notices_df = overview["notices"].copy()
+    events_df = overview["events"].copy()
 
     tabs = st.tabs(
         [
@@ -41,6 +43,7 @@ def render_parent_portal(user: dict):
             "Homework",
             "Marks",
             "Attendance",
+            "Events",
             "Charts",
             "AI Summary",
             "AI Assistant",
@@ -56,10 +59,12 @@ def render_parent_portal(user: dict):
     with tabs[3]:
         _render_attendance_view(attendance_df)
     with tabs[4]:
-        _render_charts(marks_df, attendance_df)
+        render_parent_events_section(events_df)
     with tabs[5]:
-        _render_ai_summary(marks_df, attendance_df)
+        _render_charts(marks_df, attendance_df)
     with tabs[6]:
+        _render_ai_summary(marks_df, attendance_df)
+    with tabs[7]:
         render_ai_assistant_section(role="parent", linked_student_id=linked_student_id, allow_uploads=True)
 
 

@@ -31,17 +31,17 @@ def main():
             page = st.radio(
                 "Choose a section",
                 [
+                    "Multimodal AI Assistant",
                     "Teacher Portal",
                     "Student Performance Dashboard",
-                    "Multimodal AI Assistant",
                 ],
             )
         else:
             page = st.radio(
                 "Choose a section",
                 [
-                    "Parent / Student Portal",
                     "Multimodal AI Assistant",
+                    "Parent / Student Portal",
                 ],
             )
 

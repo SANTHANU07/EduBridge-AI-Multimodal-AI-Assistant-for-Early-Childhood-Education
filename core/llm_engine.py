@@ -1,12 +1,18 @@
+import os
+import re
+
 import ollama
 
 
 class LLMEngine:
     def __init__(self):
-        self.model = "llama3.1"
+        self.model = os.getenv("OLLAMA_MODEL", "llama3.1")
+        self.prefer_cpu = False
+        self.max_context_chars = 6000
         print("LLM Engine ready!")
 
     def generate_response(self, context, query, role):
+        trimmed_context = self._trim_context(context)
         prompt = f"""
 You are EduBridge AI, an assistant for early childhood education.
 
@@ -34,31 +40,104 @@ Important rules:
 - Keep the answer directly focused on the user's question.
 
 Context:
-{context}
+{trimmed_context}
 
 Question:
 {query}
 
 Response:
 """
+        try:
+            response = self._chat_with_fallback(prompt)
+            return response["message"]["content"]
+        except ollama.ResponseError:
+            return self._build_context_fallback(trimmed_context, query, role)
 
-        response = ollama.chat(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}]
-        )
+    def _trim_context(self, context):
+        if len(context) <= self.max_context_chars:
+            return context
+        return context[: self.max_context_chars] + "\n\n[Context truncated for stability.]"
 
-        return response["message"]["content"]
+    def _chat_with_fallback(self, prompt):
+        attempts = []
+        if self.prefer_cpu:
+            attempts.extend(
+                [
+                    {"num_gpu": 0, "num_ctx": 1024},
+                    {"num_gpu": 0, "num_ctx": 512},
+                ]
+            )
+        else:
+            attempts.append(None)
+            attempts.extend(
+                [
+                    {"num_gpu": 0, "num_ctx": 1024},
+                    {"num_gpu": 0, "num_ctx": 512},
+                ]
+            )
+
+        last_error = None
+        for options in attempts:
+            try:
+                response = ollama.chat(
+                    model=self.model,
+                    messages=[{"role": "user", "content": prompt}],
+                    options=options,
+                )
+                if options and options.get("num_gpu") == 0:
+                    self.prefer_cpu = True
+                return response
+            except ollama.ResponseError as exc:
+                last_error = exc
+                if self._is_memory_error(exc):
+                    self.prefer_cpu = True
+                    continue
+                raise
+
+        raise last_error
+
+    def _is_memory_error(self, exc):
+        error_message = str(exc).lower()
+        memory_markers = [
+            "cuda",
+            "runner process has terminated",
+            "out of memory",
+            "unable to allocate",
+            "cudamalloc failed",
+        ]
+        return any(marker in error_message for marker in memory_markers)
+
+    def _build_context_fallback(self, context, query, role):
+        source_files = re.findall(r"Source File:\s*(.+)", context)
+        content_blocks = re.findall(r"Content:\n(.*?)(?=\n(?:Source File:|Recently Uploaded File:|Academic Database Context:)|\Z)", context, re.S)
+        snippets = []
+        for block in content_blocks[:3]:
+            cleaned = " ".join(block.strip().split())
+            if cleaned:
+                snippets.append(cleaned[:220])
+
+        role_intro = {
+            "parent": "I could not run the full AI model right now, but here is a helpful answer from the available school data.",
+            "teacher": "I could not run the full AI model right now, but here is a concise answer from the available school data.",
+            "admin": "I could not run the full AI model right now. Here is a structured fallback answer from the available data.",
+        }.get(role, "I could not run the full AI model right now, but here is a fallback answer from the available data.")
+
+        lines = [role_intro]
+        if source_files:
+            lines.append(f"Relevant source files: {', '.join(dict.fromkeys(source_files[:3]))}.")
+        if snippets:
+            lines.append("Key extracted information:")
+            for snippet in snippets:
+                lines.append(f"- {snippet}")
+        else:
+            lines.append("No detailed extracted content was available for this question.")
+
+        lines.append(f"Question asked: {query}")
+        lines.append("If you restart Ollama or free GPU memory, the assistant can generate a fuller answer.")
+        return "\n".join(lines)
 
     def test(self):
-        response = ollama.chat(
-            model=self.model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": "Say: EduBridge AI is ready!"
-                }
-            ]
-        )
+        response = self._chat_with_fallback("Say: EduBridge AI is ready!")
         return response["message"]["content"]
 
 

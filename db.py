@@ -113,10 +113,25 @@ def initialize_database() -> None:
                 file_path TEXT NOT NULL,
                 created_at TEXT NOT NULL
             );
+
+            CREATE TABLE IF NOT EXISTS school_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL,
+                event_date TEXT NOT NULL,
+                start_time TEXT NOT NULL,
+                end_time TEXT NOT NULL,
+                audience TEXT,
+                created_by_teacher TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                google_event_id TEXT,
+                calendar_link TEXT
+            );
             """
         )
 
     seed_sample_data()
+    ensure_default_school_events()
 
 
 def seed_sample_data() -> None:
@@ -486,12 +501,14 @@ def get_student_overview(student_id: int) -> Dict[str, pd.DataFrame | Dict]:
     class_name = student["student_class"] if student else None
     homework_df = get_homework(class_name)
     notices_df = get_notices(class_name)
+    events_df = get_school_events(class_name)
     return {
         "student": student or {},
         "marks": marks_df,
         "attendance": attendance_df,
         "homework": homework_df,
         "notices": notices_df,
+        "events": events_df,
     }
 
 
@@ -540,4 +557,104 @@ def get_student_db_context(student_id: int) -> str:
         ]
         sections.append("Recent Notices:\n" + "\n".join(notice_lines))
 
+    events_df = overview["events"].head(5)
+    if not events_df.empty:
+        event_lines = [
+            f"- {row.title} on {row.event_date} from {row.start_time} to {row.end_time}"
+            for row in events_df.itertuples()
+        ]
+        sections.append("Upcoming School Events:\n" + "\n".join(event_lines))
+
     return "\n\n".join(sections)
+
+
+def get_school_events(audience: str | None = None) -> pd.DataFrame:
+    base_query = "SELECT * FROM school_events"
+    params: List = []
+
+    if audience:
+        base_query += " WHERE audience IS NULL OR audience = '' OR audience = ? OR audience = 'Grade 1-2'"
+        params.append(audience)
+
+    base_query += " ORDER BY event_date ASC, start_time ASC"
+    return query_df(base_query, params)
+
+
+def add_school_event(
+    title: str,
+    description: str,
+    event_date: str,
+    start_time: str,
+    end_time: str,
+    audience: str,
+    teacher_name: str,
+    google_event_id: str | None = None,
+    calendar_link: str | None = None,
+) -> None:
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO school_events (title, description, event_date, start_time, end_time, audience, created_by_teacher, created_at, google_event_id, calendar_link)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                title,
+                description,
+                event_date,
+                start_time,
+                end_time,
+                audience,
+                teacher_name,
+                datetime.now().isoformat(timespec="seconds"),
+                google_event_id,
+                calendar_link,
+            ),
+        )
+
+
+def delete_school_event(record_id: int) -> None:
+    with get_connection() as conn:
+        conn.execute("DELETE FROM school_events WHERE id = ?", (record_id,))
+
+
+def ensure_default_school_events() -> None:
+    with get_connection() as conn:
+        event_count = conn.execute("SELECT COUNT(*) AS count FROM school_events").fetchone()["count"]
+        if event_count:
+            return
+
+        created_at = datetime.now().isoformat(timespec="seconds")
+        today = date.today()
+        event_rows = [
+            (
+                "Parent Teacher Meeting",
+                "Discussion about student progress and classroom goals.",
+                str(today + timedelta(days=1)),
+                "10:00",
+                "11:00",
+                "Grade 2",
+                "Anitha Teacher",
+                created_at,
+                None,
+                None,
+            ),
+            (
+                "Term 2 Exam Schedule",
+                "Math and English assessments begin next week.",
+                str(today + timedelta(days=5)),
+                "09:00",
+                "10:30",
+                "Grade 1-2",
+                "Anitha Teacher",
+                created_at,
+                None,
+                None,
+            ),
+        ]
+        conn.executemany(
+            """
+            INSERT INTO school_events (title, description, event_date, start_time, end_time, audience, created_by_teacher, created_at, google_event_id, calendar_link)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            event_rows,
+        )
